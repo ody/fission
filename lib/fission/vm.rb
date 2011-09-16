@@ -247,6 +247,7 @@ module Fission
       Fission.ui.output "Configuring #{target_vm}"
       rename_vm_files source_vm, target_vm
       update_config source_vm, target_vm
+
     end
 
     def self.delete(vm_name)
@@ -299,7 +300,28 @@ module Fission
           text = (File.read file).gsub from, to
           File.open(file, 'w'){ |f| f.print text }
         end
+
       end
+
+      # Rewrite vmx file to avoid messages
+      new_vmx_file=File.open(File.join(path(to),"#{to}.vmx"),'r')
+
+      content=new_vmx_file.read
+
+      # Filter out other values
+      content=content.gsub(/^tools.remindInstall.*\n/, "")
+      content=content.gsub(/^uuid.action.*\n/,"").strip
+
+      # Remove generate mac addresses
+      content=content.gsub(/^ethernet.+generatedAddress.*\n/,"").strip
+
+      # Add the correct values
+      content=content+"\ntools.remindInstall = \"FALSE\"\n"
+      content=content+"uuid.action = \"create\"\n"
+
+      # Now rewrite the vmx file
+      File.open(new_vmx_file,'w'){ |f| f.print content}
+
     end
 
   end
