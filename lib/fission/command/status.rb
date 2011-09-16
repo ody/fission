@@ -15,7 +15,7 @@ module Fission
         VM.all.each do |vmname|
           vm=VM.new(vmname)
           status = vm.state
-          Fission.ui.output_printf "%-#{longest_vm_name.length}s   %s\n", vmname, status
+          Fission.ui.output_printf "%-#{longest_vm_name.length}s   %s\n", vmname, "["+status+"]"
         end
       end
 

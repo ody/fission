@@ -72,6 +72,17 @@ module Fission
       end
     end
 
+    def halt
+      command = "#{Fission.config.attributes['vmrun_cmd']} stop #{conf_file.gsub ' ', '\ '} hard 2>&1"
+      output = `#{command}`
+
+      if $?.exitstatus == 0
+        Fission.ui.output "VM halted"
+      else
+        Fission.ui.output "There was a problem halting the VM.  The error was:\n#{output}"
+      end
+    end
+
     def suspend
       unless state!="running"
         command = "#{Fission.config.attributes['vmrun_cmd']} suspend #{conf_file.gsub ' ', '\ '} 2>&1"
@@ -146,7 +157,7 @@ module Fission
     #
     def ip_address
 
-      if state!=:running
+      if state!="running"
         return nil
       end
       # First we find the macaddress
