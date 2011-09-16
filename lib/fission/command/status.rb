@@ -12,9 +12,10 @@ module Fission
 
         longest_vm_name = all_vms.max { |a,b| a.length <=> b.length }
 
-        VM.all.each do |vm|
-          status = all_running_vms.include?(vm) ? '[running]' : '[not running]'
-          Fission.ui.output_printf "%-#{longest_vm_name.length}s   %s\n", vm, status
+        VM.all.each do |vmname|
+          vm=VM.new(vmname)
+          status = vm.state
+          Fission.ui.output_printf "%-#{longest_vm_name.length}s   %s\n", vmname, status
         end
       end
 

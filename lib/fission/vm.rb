@@ -73,13 +73,35 @@ module Fission
     end
 
     def suspend
-      command = "#{Fission.config.attributes['vmrun_cmd']} suspend #{conf_file.gsub ' ', '\ '} 2>&1"
-      output = `#{command}`
+      unless state!="running"
+        command = "#{Fission.config.attributes['vmrun_cmd']} suspend #{conf_file.gsub ' ', '\ '} 2>&1"
+        output = `#{command}`
 
-      if $?.exitstatus == 0
-        Fission.ui.output "VM suspended"
+        if $?.exitstatus == 0
+          Fission.ui.output "VM suspended"
+        else
+          Fission.ui.output "There was a problem suspending the VM.  The error was:\n#{output}"
+        end
+      end
+    end
+
+    def resume
+      if state=="suspended"
+        start
+      end
+    end
+
+    def state
+      if VM.all_running.include?(name)
+        return "running"
       else
-        Fission.ui.output "There was a problem suspending the VM.  The error was:\n#{output}"
+        # It coud be suspended
+        suspend_filename=File.join(File.dirname(conf_file), File.basename(conf_file,".vmx")+".vmem")
+        if File.exists?(suspend_filename)
+          return "suspended"
+        else
+          return "powered-off"
+        end
       end
     end
 
@@ -124,6 +146,9 @@ module Fission
     #
     def ip_address
 
+      if state!=:running
+        return nil
+      end
       # First we find the macaddress
       unless mac_address.nil?
 
