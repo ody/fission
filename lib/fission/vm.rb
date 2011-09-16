@@ -100,7 +100,7 @@ module Fission
         if File.exists?(suspend_filename)
           return "suspended"
         else
-          return "powered-off"
+          return "not running"
         end
       end
     end
