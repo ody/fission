@@ -83,6 +83,74 @@ module Fission
       end
     end
 
+    # Retrieve the first mac address for a vm
+    # This will only retrieve the first auto generate mac address
+    #
+    # Usage :
+    # > vm=Fission::VM.new("lucid64")
+    # > vm.mac_address
+    # => "00:0c:29:26:49:2c"
+    def mac_address
+      unless File.exists?(conf_file)
+        return nil
+      else
+        line=File.new(conf_file).grep(/^ethernet0.generatedAddress =/)
+        if line.nil?
+          #Fission.ui.output "Hmm, the vmx file #{conf_file} does not contain a generated mac address "
+        end
+        address=line.first.split("=")[1].strip.split(/\"/)[1]
+        return address
+      end
+    end
+
+    # Retrieve the ip address for a vm.
+    # This will only look for dynamically assigned ip address via vmware dhcp
+    #
+    # > vm=Fission::VM.new("lucid64")
+    # > vm.ip_address
+    #  => "172.16.44.139"
+    #
+    # Some pointers with extra info
+    # - http://nileshk.com/2009/06/24/vmware-fusion-nat-dhcp-and-port-forwarding.html
+    # - http://works13.com/blog/mac/ssh-your-arch-linux-vm-in-vmware-fusion.htm
+    #
+    #       /var/db/vmware/vmnet-dhcpd-vmnet8.leases
+    #
+    #       lease 172.16.44.134 {
+    #         starts 4 2011/07/28 15:54:41;
+    #         ends 4 2011/07/28 16:24:41;
+    #         hardware ethernet 00:0c:29:54:06:5c;
+    #       }
+    #
+    def ip_address
+
+      # First we find the macaddress
+      unless mac_address.nil?
+
+        # Find all lines that contain a hardware element
+        # and find the index of the last line that contains the mac address
+        index=File.new("/var/db/vmware/vmnet-dhcpd-vmnet8.leases").grep(/hardware /).rindex{ |x| x.include?(mac_address)}
+
+        if index.nil?
+          # We could not find the mac address, so we give back a nil ip_addres
+          return nil
+        else
+          lease_line=File.new("/var/db/vmware/vmnet-dhcpd-vmnet8.leases").grep(/^lease/)[index]
+          unless lease_line.nil?
+            ip=lease_line.split(/ /)[1]
+            return ip
+          else
+            # Found no matching lease_line
+            return nil
+          end
+        end
+
+      else
+        # No mac address was found for this machine so we can't calculate the ip-address
+        return nil
+      end
+    end
+
     def conf_file
       vmx_path = File.join(self.class.path(@name), "*.vmx")
       conf_files = Dir.glob(vmx_path)
@@ -151,6 +219,7 @@ module Fission
       Fission::Metadata.delete_vm_info(path(vm_name))
     end
 
+
     private
     def self.rename_vm_files(from, to)
       files_to_rename(from, to).each do |file|
@@ -164,7 +233,7 @@ module Fission
 
         unless File.exists?(File.join(path(to), file.gsub(text_to_replace, to)))
           FileUtils.mv File.join(path(to), file),
-                       File.join(path(to), file.gsub(text_to_replace, to))
+            File.join(path(to), file.gsub(text_to_replace, to))
         end
       end
     end
