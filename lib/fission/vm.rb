@@ -103,6 +103,8 @@ module Fission
     end
 
     def state
+      return "not created" unless exists?
+
       if VM.all_running.include?(name)
         return "running"
       else
@@ -232,6 +234,10 @@ module Fission
       end
     end
 
+    def exists?
+      Fission::VM.exists?(name)
+    end
+
     def self.exists?(vm_name)
       File.directory? path(vm_name)
     end
@@ -249,6 +255,7 @@ module Fission
       update_config source_vm, target_vm
 
     end
+
 
     def self.delete(vm_name)
       Fission.ui.output "Deleting vm #{vm_name}"
