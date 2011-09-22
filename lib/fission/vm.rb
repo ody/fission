@@ -1,4 +1,4 @@
-require 'leasesfile'
+require 'fission/leasesfile'
 
 module Fission
   class VM
