@@ -1,3 +1,5 @@
+require 'leasesfile'
+
 module Fission
   class VM
     attr_reader :name
@@ -158,31 +160,16 @@ module Fission
     #       }
     #
     def ip_address
-
       if state!="running"
         return nil
       end
-      # First we find the macaddress
       unless mac_address.nil?
-
-        # Find all lines that contain a hardware element
-        # and find the index of the last line that contains the mac address
-        index=File.new("/var/db/vmware/vmnet-dhcpd-vmnet8.leases").grep(/hardware /).rindex{ |x| x.include?(mac_address)}
-
-        if index.nil?
-          # We could not find the mac address, so we give back a nil ip_addres
+        lease=LeasesFile.new("/var/db/vmware/vmnet-dhcpd-vmnet8.leases").find_lease_by_mac(mac_address)
+        if lease.nil?
           return nil
         else
-          lease_line=File.new("/var/db/vmware/vmnet-dhcpd-vmnet8.leases").grep(/^lease/)[index]
-          unless lease_line.nil?
-            ip=lease_line.split(/ /)[1]
-            return ip
-          else
-            # Found no matching lease_line
-            return nil
-          end
+          return lease.ip
         end
-
       else
         # No mac address was found for this machine so we can't calculate the ip-address
         return nil
