@@ -18,27 +18,49 @@ module Fission
 
         vms_to_suspend.each do |vm_name|
           Fission.ui.output "Suspending '#{vm_name}'"
-          Fission::VM.new(vm_name).suspend
+          response = Fission::VM.new(vm_name).suspend
+
+          if response.successful?
+            Fission.ui.output "VM '#{vm_name}' suspended"
+          else
+            Fission.ui.output_and_exit "There was an error suspending the VM.  The error was:\n#{response.output}", response.code
+          end
         end
       end
 
       def vms_to_suspend
         if @options.all
-          vms_to_suspend = VM.all_running
+          response = Fission::VM.all_running
+          if response.successful?
+            vms = response.data
+          end
         else
           vm_name = @args.first
-          unless Fission::VM.exists? vm_name
-            Fission.ui.output ''
-            Fission.ui.output_and_exit "Unable to find the VM #{vm_name} (#{Fission::VM.path(vm_name)})", 1
+
+          exists_response = Fission::VM.exists? vm_name
+
+          if exists_response.successful?
+            unless exists_response.data
+              Fission.ui.output ''
+              Fission.ui.output_and_exit "Unable to find the VM #{vm_name} (#{Fission::VM.path(vm_name)})", 1
+            end
           end
 
-          unless VM.all_running.include?(vm_name)
-            Fission.ui.output ''
-            Fission.ui.output_and_exit "VM '#{vm_name}' is not running", 1
+          response = Fission::VM.all_running
+
+          if response.successful?
+            unless response.data.include?(vm_name)
+              Fission.ui.output ''
+              Fission.ui.output_and_exit "VM '#{vm_name}' is not running", 1
+            end
+          else
+            Fission.ui.output_and_exit "There was an error getting the list of running VMs.  The error was:\n#{response.output}", response.code
           end
 
-          vms_to_suspend = [vm_name]
+          vms = [vm_name]
         end
+
+        vms
       end
 
       def option_parser
