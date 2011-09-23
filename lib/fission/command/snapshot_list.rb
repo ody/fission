@@ -15,28 +15,20 @@ module Fission
 
         vm_name = @args.first
 
-        exists_response = Fission::VM.exists? vm_name
-
-        if exists_response.successful?
-          unless exists_response.data
-            Fission.ui.output_and_exit "Unable to find the VM #{vm_name} (#{Fission::VM.path(vm_name)})", 1 
-          end
+        unless Fission::VM.exists? vm_name
+          Fission.ui.output_and_exit "Unable to find the VM #{vm_name} (#{Fission::VM.path(vm_name)})", 1 
         end
 
-        @vm = Fission::VM.new vm_name
-        response = @vm.snapshots
-
-        if response.successful?
-          snaps = response.data
-
-          if snaps.any?
+        vm = Fission::VM.new vm_name
+        snaps=vm.snapshots
+        unless snaps.empty?
             Fission.ui.output snaps.join("\n")
-          else
-            Fission.ui.output "No snapshots found for VM '#{vm_name}'"
-          end
         else
-          Fission.ui.output_and_exit "There was an error listing the snapshots.  The error was:\n#{response.output}", response.code
+          Fission.ui.output "No snapshots found for VM '#{vm_name}'"
         end
+
+        # TODO
+        Fission.ui.output_and_exit "There was an error listing the snapshots.  The error was:\n#{task.output}", task.code
       end
 
       def option_parser

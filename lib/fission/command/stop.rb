@@ -15,30 +15,26 @@ module Fission
 
         vm_name = @args.first
 
-        exists_response = Fission::VM.exists? vm_name
 
-        if exists_response.successful?
-          unless exists_response.data
-            Fission.ui.output_and_exit "Unable to find the VM #{vm_name} (#{Fission::VM.path(vm_name)})", 1 
-          end
+        unless Fission::VM.exists? vm_name
+          Fission.ui.output_and_exit "Unable to find the VM #{vm_name} (#{Fission::VM.path(vm_name)})", 1 
         end
+
+        vm = Fission::VM.new vm_name
 
         response = Fission::VM.all_running
 
-        if response.successful?
-          unless response.data.include?(vm_name)
+          unless vm.is_running?
             Fission.ui.output ''
             Fission.ui.output_and_exit "VM '#{vm_name}' is not running", 0
           end
-        else
-          Fission.ui.output_and_exit "There was an error determining if the VM is already running.  The error was:\n#{response.output}", response.code
-        end
+        #TODO
+        #  Fission.ui.output_and_exit "There was an error determining if the VM is already running.  The error was:\n#{response.output}", response.code
 
         Fission.ui.output "Stopping '#{vm_name}'"
-        @vm = Fission::VM.new vm_name
-        response = @vm.stop
+        task  = vm.stop
 
-        if response.successful?
+        if task.successful?
           Fission.ui.output "VM '#{vm_name}' stopped"
         else
           Fission.ui.output_and_exit "There was an error stopping the VM.  The error was:\n#{response.output}", response.code

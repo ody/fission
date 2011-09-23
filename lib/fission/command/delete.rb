@@ -18,50 +18,39 @@ module Fission
 
         target_vm = @args.first
 
-        exists_response = Fission::VM.exists? target_vm
+        unless Fission::VM.exists? target_vm
+          Fission.ui.output_and_exit "Unable to find target vm #{target_vm} (#{Fission::VM.path(target_vm)})", 1
+        end
 
-        if exists_response.successful?
-          unless exists_response.data
-            Fission.ui.output_and_exit "Unable to find target vm #{target_vm} (#{Fission::VM.path(target_vm)})", 1
+        if Fission::VM.all_running.include? target_vm
+          Fission.ui.output 'VM is currently running'
+          if @options.force
+            Fission.ui.output 'Going to stop it'
+            Fission::Command::Stop.new([target_vm]).execute
+          else
+            Fission.ui.output_and_exit "Either stop/suspend the VM or use '--force' and try again.", 1
           end
         end
 
-        response = Fission::VM.all_running
 
-        if response.successful?
-          if response.data.include? target_vm
-            Fission.ui.output 'VM is currently running'
-            if @options.force
-              Fission.ui.output 'Going to stop it'
-              Fission::Command::Stop.new([target_vm]).execute
-            else
-              Fission.ui.output_and_exit "Either stop/suspend the VM or use '--force' and try again.", 1
-            end
+        if Fission::Fusion.is_running?
+          Fission.ui.output 'It looks like the Fusion GUI is currently running'
+
+          if @options.force
+            Fission.ui.output 'The Fusion metadata for the VM may not be removed completely'
+          else
+            Fission.ui.output "Either exit the Fusion GUI or use '--force' and try again"
+            Fission.ui.output_and_exit "NOTE: Forcing a VM deletion with the Fusion GUI running may not clean up all of the VM metadata", 1
           end
         end
 
-        fusion_running_response = Fission::Fusion.is_running?
+        delete_task = Fission::VM.delete target_vm
 
-        if fusion_running_response.successful?
-          if fusion_running_response.data
-            Fission.ui.output 'It looks like the Fusion GUI is currently running'
-
-            if @options.force
-              Fission.ui.output 'The Fusion metadata for the VM may not be removed completely'
-            else
-              Fission.ui.output "Either exit the Fusion GUI or use '--force' and try again"
-              Fission.ui.output_and_exit "NOTE: Forcing a VM deletion with the Fusion GUI running may not clean up all of the VM metadata", 1
-            end
-          end
-        end
-
-        delete_response = Fission::VM.delete target_vm
-
-        if delete_response.successful?
+        if delete_task.successful?
           Fission.ui.output ''
           Fission.ui.output "Deletion complete!"
         else
-          Fission.ui.output_and_exit "There was an error deleting the VM.  The error was:\n#{delete_response.output}", delete_response.code
+          Fission.ui.output_and_exit "There was an error deleting the VM.  The error was:\n#{delete_task.output}", delete_task.code
         end
       end
 

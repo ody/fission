@@ -59,7 +59,7 @@ module Fission
         response.output = output
       end
 
-      response
+      response.data
     end
 
     def start(args={})
@@ -241,7 +241,7 @@ module Fission
       response = Fission::Response.new :code => 0
       response.data = vm_dirs.map { |d| File.basename d, '.vmwarevm' }
 
-      response
+      response.data
     end
 
     def self.all_running
@@ -261,16 +261,17 @@ module Fission
         response.output = output
       end
 
-      response
+      response.data
     end
 
     def exists?
-      response=Fission::VM.exists?(name)
-      return response.data
+      Fission::VM.exists?(name)
     end
 
     def self.exists?(vm_name)
-      Response.new :code => 0, :data => (File.directory? path(vm_name))
+      response = Fission::Response.new :code => 0
+      response.data = File.directory? path(vm_name)
+      response.data
     end
 
     def self.path(vm_name)
