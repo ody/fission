@@ -22,7 +22,7 @@ module Fission
       new_content = CFPropertyList::List.new
       new_content.value = CFPropertyList.guess @content
       new_content.save Fission.config.attributes['plist_file'],
-                       CFPropertyList::List::FORMAT_BINARY
+        CFPropertyList::List::FORMAT_BINARY
     end
 
     def delete_vm_restart_document(vm_path)

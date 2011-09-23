@@ -1,4 +1,5 @@
 require 'fission/leasesfile'
+require 'shellwords'
 
 module Fission
   class VM
@@ -8,175 +9,102 @@ module Fission
       @name = name
     end
 
-    def create_snapshot(name)
-      conf_file_response = conf_file
-      unless conf_file_response.successful?
-        return conf_file_response
-      end
-
-      command = "#{Fission.config.attributes['vmrun_cmd']} snapshot "
-      command << "#{conf_file_response.data.gsub ' ', '\ '} \"#{name}\" 2>&1"
-      output = `#{command}`
-
-      response = Fission::Response.new :code => $?.exitstatus
-      response.output = output unless response.successful?
-
-      response
+    #####################################################
+    # Path Helpers
+    #####################################################
+    # Returns the topdir of the vm
+    def path
+      File.join Fission.config.attributes['vm_dir'], "#{@name}.vmwarevm"
     end
 
-    def revert_to_snapshot(name)
-      conf_file_response = conf_file
-      unless conf_file_response.successful?
-        return conf_file_response
-      end
-
-      command = "#{Fission.config.attributes['vmrun_cmd']} revertToSnapshot "
-      command << "#{conf_file_response.data.gsub ' ', '\ '} \"#{name}\" 2>&1"
-      output = `#{command}`
-
-      response = Fission::Response.new :code => $?.exitstatus
-      response.output = output unless response.successful?
-
-      response
+    # Returns a string to the path of the config file
+    # There is no guarantee it exists
+    def vmx_path
+      return File.join(path, "#{@name}.vmx")
     end
 
-    def snapshots
-      conf_file_response = conf_file
-      unless conf_file_response.successful?
-        return conf_file_response
-      end
 
-      command = "#{Fission.config.attributes['vmrun_cmd']} listSnapshots "
-      command << "#{conf_file_response.data.gsub ' ', '\ '} 2>&1"
+    ####################################################################
+    # State information
+    ####################################################################
+    def running?
+      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+
+      command = "#{vmrun_cmd} list"
       output = `#{command}`
 
       response = Fission::Response.new :code => $?.exitstatus
 
       if response.successful?
-        snaps = output.split("\n").select { |s| !s.include? 'Total snapshots:' }
-        response.data = snaps.map { |s| s.strip }
-      else
-        response.output = output
-      end
-
-      response.data
-    end
-
-    def start(args={})
-      conf_file_response = conf_file
-      unless conf_file_response.successful?
-        return conf_file_response
-      end
-
-      command = "#{Fission.config.attributes['vmrun_cmd']} start "
-      command << "#{conf_file_response.data.gsub ' ', '\ '} "
-
-      if !args[:headless].blank? && args[:headless]
-        command << "nogui 2>&1"
-      else
-        command << "gui 2>&1"
-      end
-
-      output = `#{command}`
-
-      response = Fission::Response.new :code => $?.exitstatus
-      response.output = output unless response.successful?
-
-      response
-    end
-
-    def stop
-      conf_file_response = conf_file
-      unless conf_file_response.successful?
-        return conf_file_response
-      end
-
-      command = "#{Fission.config.attributes['vmrun_cmd']} stop "
-      command << "#{conf_file_response.data.gsub ' ', '\ '} 2>&1"
-      output = `#{command}`
-
-      response = Fission::Response.new :code => $?.exitstatus
-      response.output = output unless response.successful?
-
-      response
-    end
-
-    def halt
-      command = "#{Fission.config.attributes['vmrun_cmd']} stop #{conf_file.gsub ' ', '\ '} hard 2>&1"
-      output = `#{command}`
-
-      if $?.exitstatus == 0
-        Fission.ui.output "VM halted"
-      else
-        Fission.ui.output "There was a problem halting the VM.  The error was:\n#{output}"
-      end
-    end
-
-    def resume
-      if state=="suspended"
-        start
-      end
-    end
-
-    def state
-      return "not created" unless exists?
-
-      if VM.all_running.include?(name)
-        return "running"
-      else
-        # It coud be suspended
-        suspend_filename=File.join(File.dirname(conf_file), File.basename(conf_file,".vmx")+".vmem")
-        if File.exists?(suspend_filename)
-          return "suspended"
-        else
-          return "not running"
+        vms = output.split("\n").select do |vm|
+          vm.include?('.vmx') && File.exists?(vm) && File.extname(vm) == '.vmx'
         end
+        return vms.include?(self.vmx_path)
+      else
+        raise Fission::Error("Error listing the state of vm #{@name}:\n#{output}")
       end
+    end
+
+    def suspended?
+      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+
+      suspend_filename=File.join(File.dirname(vmx_path), File.basename(vmx_path,".vmx")+".vmem")
+      return File.exists?(suspend_filename)
+    end
+
+    # Checks to see if a vm exists
+    def exists?
+      File.exists? vmx_path
+    end
+
+    # Returns the state of a vm
+    def state
+      return "not created" unless self.exists?
+
+      return "suspend" if self.suspended?
+
+      return "running" if self.running?
+
+      return "not running"
+    end
+
+    ####################################################################
+    # VM information
+    ####################################################################
+
+    # Returns an Array of snapshot names
+    def snapshots
+      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+
+      command = "#{vmrun_cmd} listSnapshots #{vmx_path.shellescape} 2>&1"
+      output = `#{command}`
+
+      raise "There was an error listing the snapshots of #{@name} :\n #{output}" unless  $?.exitstatus==0
+
+      snaps_unfiltered = output.split("\n").select { |s| !s.include? 'Total snapshots:' }
+      snaps=snaps_unfiltered.map { |s| s.strip }
+      return snaps
     end
 
     # Retrieve the first mac address for a vm
     # This will only retrieve the first auto generate mac address
-    #
-    # Usage :
-    # > vm=Fission::VM.new("lucid64")
-    # > vm.mac_address
-    # => "00:0c:29:26:49:2c"
     def mac_address
-      unless File.exists?(conf_file)
+      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+
+      line=File.new(vmx_path).grep(/^ethernet0.generatedAddress =/)
+      if line.nil?
+        #Fission.ui.output "Hmm, the vmx file #{vmx_path} does not contain a generated mac address "
         return nil
-      else
-        line=File.new(conf_file).grep(/^ethernet0.generatedAddress =/)
-        if line.nil?
-          #Fission.ui.output "Hmm, the vmx file #{conf_file} does not contain a generated mac address "
-        end
-        address=line.first.split("=")[1].strip.split(/\"/)[1]
-        return address
       end
+      address=line.first.split("=")[1].strip.split(/\"/)[1]
+      return address
     end
 
     # Retrieve the ip address for a vm.
     # This will only look for dynamically assigned ip address via vmware dhcp
-    #
-    # > vm=Fission::VM.new("lucid64")
-    # > vm.ip_address
-    #  => "172.16.44.139"
-    #
-    # Some pointers with extra info
-    # - http://nileshk.com/2009/06/24/vmware-fusion-nat-dhcp-and-port-forwarding.html
-    # - http://works13.com/blog/mac/ssh-your-arch-linux-vm-in-vmware-fusion.htm
-    #
-    #       /var/db/vmware/vmnet-dhcpd-vmnet8.leases
-    #
-    #       lease 172.16.44.134 {
-    #         starts 4 2011/07/28 15:54:41;
-    #         ends 4 2011/07/28 16:24:41;
-    #         hardware ethernet 00:0c:29:54:06:5c;
-    #       }
-    #
     def ip_address
-      if state!="running"
-        return nil
-      end
+      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+
       unless mac_address.nil?
         lease=LeasesFile.new("/var/db/vmware/vmnet-dhcpd-vmnet8.leases").find_lease_by_mac(mac_address)
         if lease.nil?
@@ -190,96 +118,47 @@ module Fission
       end
     end
 
-    def suspend
-      conf_file_response = conf_file
-      unless conf_file_response.successful?
-        return conf_file_response
-      end
+    ####################################################################
+    # VMS information
+    ####################################################################
 
-      command = "#{Fission.config.attributes['vmrun_cmd']} suspend "
-      command << "#{conf_file_response.data.gsub ' ', '\ '} 2>&1"
-      output = `#{command}`
-
-      response = Fission::Response.new :code => $?.exitstatus
-      response.output = output unless response.successful?
-      response
-    end
-
-    def conf_file
-      vmx_path = File.join(self.class.path(@name), "*.vmx")
-      conf_files = Dir.glob(vmx_path)
-      response = Response.new
-
-      case conf_files.count
-      when 0
-        response.code = 1
-        response.output = "Unable to find a config file for VM '#{@name}' (in '#{vmx_path}')"
-      when 1
-        response.code = 0
-        response.data = conf_files.first
-      else
-        if conf_files.include?(File.join(File.dirname(vmx_path), "#{@name}.vmx"))
-          response.code = 0
-          response.data = File.join(File.dirname(vmx_path), "#{@name}.vmx")
-        else
-          response.code = 1
-          output = "Multiple config files found for VM '#{@name}' ("
-          output << conf_files.sort.map { |f| "'#{File.basename(f)}'" }.join(', ')
-          output << " in '#{File.dirname(vmx_path)}')"
-          response.output = output
-        end
-      end
-
-      response
-    end
-
+    # Returns an array of vm objects
     def self.all
       vm_dirs = Dir[File.join Fission.config.attributes['vm_dir'], '*.vmwarevm'].select do |d|
         File.directory? d
       end
 
-      response = Fission::Response.new :code => 0
-      response.data = vm_dirs.map { |d| File.basename d, '.vmwarevm' }
-
-      response.data
-    end
-
-    def self.all_running
-      command = "#{Fission.config.attributes['vmrun_cmd']} list"
-
-      output = `#{command}`
-
-      response = Fission::Response.new :code => $?.exitstatus
-
-      if response.successful?
-        vms = output.split("\n").select do |vm|
-          vm.include?('.vmx') && File.exists?(vm) && File.extname(vm) == '.vmx'
-        end
-
-        response.data = vms.map { |vm| File.basename(File.dirname(vm), '.vmwarevm') }
-      else
-        response.output = output
+      vm_names=vm_dirs.map { |d| File.basename d, '.vmwarevm' }
+      vms=[]
+      vm_names.each do |vmname|
+        vm=Fission::VM.new vmname
+        vms << vm
       end
 
-      response.data
+      return vms
     end
 
-    def exists?
-      Fission::VM.exists?(name)
+    # Returns an array of vms that are running
+    def self.all_running
+      running_vms=self.all.select do |vm|
+        vm.state=="running"
+      end
+      return running_vms
     end
 
-    def self.exists?(vm_name)
-      response = Fission::Response.new :code => 0
-      response.data = File.directory? path(vm_name)
-      response.data
+    # Returns an existing vm
+    def self.get(name)
+      return Fission::VM.new(name)
     end
 
-    def self.path(vm_name)
-      File.join Fission.config.attributes['vm_dir'], "#{vm_name}.vmwarevm"
-    end
-
+    #####################################################
+    # VM Class Actions
+    #####################################################
     def self.clone(source_vm, target_vm)
-      FileUtils.cp_r path(source_vm), path(target_vm)
+      raise Fission::Error("VM #{source_vm} does not exist") unless Fission::VM.new(source_vm).exists?
+      raise Fission::Error("VM #{target_vm} already exists") if Fission::VM.new(target_vm).exists?
+
+      FileUtils.cp_r Fission::VM.new(source_vm).path, Fission::VM.new(target_vm).path
 
       rename_vm_files source_vm, target_vm
       update_config source_vm, target_vm
@@ -287,29 +166,132 @@ module Fission
       response = Response.new :code => 0
     end
 
-
     def self.delete(vm_name)
-      FileUtils.rm_rf path(vm_name)
-      Fission::Metadata.delete_vm_info(path(vm_name))
+      raise Fission::Error("VM #{source_vm} does not exist") unless Fission::VM.new(vm_name).exists?
+
+      vm=Fission::VM.new(vm_name)
+      FileUtils.rm_rf vm.path
+      Fission::Metadata.delete_vm_info(vm.path)
 
       Response.new :code => 0
     end
 
 
+    #####################################################
+    # VM Instance Actions
+    #####################################################
+    def create_snapshot(name)
+      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+
+      command = "#{vmrun_cmd} snapshot #{vmx_path.shellescape} \"#{name}\" 2>&1"
+      output = `#{command}`
+
+      response = Fission::Response.new :code => $?.exitstatus
+      response.output = output unless response.successful?
+
+      response
+    end
+
+    def start(args={})
+      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+      raise Fission::Error("VM #{@name} is already started") if self.running?
+
+
+      command = "#{vmrun_cmd} start #{vmx_path.shellescape}"
+
+      if !args[:headless].blank? && args[:headless]
+        command << " nogui 2>&1"
+      else
+        command << " gui 2>&1"
+      end
+
+      output = `#{command}`
+
+      response = Fission::Response.new :code => $?.exitstatus
+      response.output = output unless response.successful?
+
+      response
+    end
+
+    def stop
+      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+      raise Fission::Error("VM #{@name} is not running") unless self.running?
+
+      command = "#{vmrun_cmd} stop #{vmx_path.shellescape} 2>&1"
+      output = `#{command}`
+
+      response = Fission::Response.new :code => $?.exitstatus
+      response.output = output unless response.successful?
+
+      response
+    end
+
+    def halt
+      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+      raise Fission::Error("VM #{@name} is not running") unless self.running?
+
+      command = "#{vmrun_cmd} stop #{vmx_path.shellescape} hard 2>&1"
+      output = `#{command}`
+
+      response = Fission::Response.new :code => $?.exitstatus
+      response.output = output unless response.successful?
+
+      response
+    end
+
+    def resume
+      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+      raise Fission::Error("VM #{@name} is already running") if self.running?
+      if self.suspended?
+        self.start
+      end
+    end
+
+    def suspend
+      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+      raise Fission::Error("VM #{@name} is not running") unless self.running?
+
+      command = "#{vmrun_cmd} suspend #{vmx_path.shellescape} hard 2>&1"
+      output = `#{command}`
+
+      response = Fission::Response.new :code => $?.exitstatus
+      response.output = output unless response.successful?
+      response
+    end
+
+    # Action to revert to a snapshot
+    # Returns a response object
+    def revert_to_snapshot(name)
+      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+
+      command = "#{vmrun_cmd} revertToSnapshot #{vmx_path.shellescape} \"#{name}\" 2>&1"
+      output = `#{command}`
+
+      response = Fission::Response.new :code => $?.exitstatus
+      response.output = output unless response.successful?
+
+      response
+    end
+
+    #####################################################
+    # Helpers
+    #####################################################
     private
     def self.rename_vm_files(from, to)
-      files_to_rename(from, to).each do |file|
-        text_to_replace = File.basename(file, File.extname(file))
+      to_vm=Fission::VM.new(to)
 
-        if File.extname(file) == '.vmdk'
-          if file.match /\-s\d+\.vmdk/
-            text_to_replace = file.partition(/\-s\d+.vmdk/).first
+      files_to_rename(from, to).each do |filename|
+        text_to_replace = File.basename(filename, File.extname(filename))
+
+        if File.extname(filename) == '.vmdk'
+          if filename.match /\-s\d+\.vmdk/
+            text_to_replace = filename.partition(/\-s\d+.vmdk/).first
           end
         end
 
-        unless File.exists?(File.join(path(to), file.gsub(text_to_replace, to)))
-          FileUtils.mv File.join(path(to), file),
-            File.join(path(to), file.gsub(text_to_replace, to))
+        unless File.exists?(File.join(to_vm.path, filename.gsub(text_to_replace, to)))
+          FileUtils.mv File.join(to_vm.path, filename),
+            File.join(to_vm.path, filename.gsub(text_to_replace, to))
         end
       end
     end
@@ -318,7 +300,9 @@ module Fission
       files_which_match_source_vm = []
       other_files = []
 
-      Dir.entries(path(to)).each do |f|
+      from_vm=Fission::VM.new(from)
+
+      Dir.entries(from_vm.path).each do |f|
         unless f == '.' || f == '..'
           f.include?(from) ? files_which_match_source_vm << f : other_files << f
         end
@@ -331,9 +315,14 @@ module Fission
       ['.nvram', '.vmdk', '.vmem', '.vmsd', '.vmss', '.vmx', '.vmxf']
     end
 
+    # This is done after a clone has been done
+    # All files are already at the to location
+    # The content of the text files will be substituted with strings from => to
     def self.update_config(from, to)
+      to_vm=Fission::VM.new(to)
+
       ['.vmx', '.vmxf', '.vmdk'].each do |ext|
-        file = File.join path(to), "#{to}#{ext}"
+        file = File.join to_vm.path, "#{to}#{ext}"
 
         unless File.binary?(file)
           text = (File.read file).gsub from, to
@@ -343,7 +332,7 @@ module Fission
       end
 
       # Rewrite vmx file to avoid messages
-      new_vmx_file=File.open(File.join(path(to),"#{to}.vmx"),'r')
+      new_vmx_file=File.open(File.join(to_vm.vmx_path),'r')
 
       content=new_vmx_file.read
 
@@ -361,6 +350,10 @@ module Fission
       # Now rewrite the vmx file
       File.open(new_vmx_file,'w'){ |f| f.print content}
 
+    end
+
+    def vmrun_cmd
+      return Fission.config.attributes['vmrun_cmd']
     end
 
   end

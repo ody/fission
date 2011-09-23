@@ -15,18 +15,15 @@ module Fission
 
         vm_name, snap_name = @args.take 2
 
-        unless Fission::VM.exists? vm_name
+        vm = Fission::VM.new vm_name
+        unless vm.exists?
           Fission.ui.output_and_exit "Unable to find the VM #{vm_name} (#{Fission::VM.path(vm_name)})", 1 
         end
 
-        unless Fission::VM.all_running.include? vm_name
+        unless vm.running?
           Fission.ui.output "VM '#{vm_name}' is not running"
           Fission.ui.output_and_exit 'A snapshot cannot be created unless the VM is running', 1
         end
-        # TODO
-        # Fission.ui.output_and_exit "There was an error determining if this VM is running.  The error was:\n#{task.output}", task.code
-
-        vm = Fission::VM.new vm_name
 
         if vm.snapshots.include? snap_name
           Fission.ui.output_and_exit "VM '#{vm_name}' already has a snapshot named '#{snap_name}'", 1

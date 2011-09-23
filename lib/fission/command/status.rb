@@ -8,15 +8,12 @@ module Fission
 
       def execute
 
-        #TODO
-        #  Fission.ui.output_and_exit "There was an error getting the list of running VMs.  The error was:\n#{response.output}", response.code
-
-        longest_vm_name = all_vms.max { |a,b| a.length <=> b.length }
-
-        Fission::VM.all.each do |vmname|
-          vm=Fission::VM.new(vmname)
+        all_vms=Fission::VM.all
+        vm_with_longest_name = all_vms.max { |a,b| a.name.length <=> b.name.length }
+        max_name_length=vm_with_longest_name.name.length
+        all_vms.each do |vm|
           status = vm.state
-          Fission.ui.output_printf "%-#{longest_vm_name.length}s   %s\n", vmname, "["+status+"]"
+          Fission.ui.output_printf "%-#{max_name_length}s   %s\n", vm.name, "["+status+"]"
         end
 
       end

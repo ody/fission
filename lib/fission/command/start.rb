@@ -18,25 +18,23 @@ module Fission
 
         vm_name = @args.first
 
-        unless  Fission::VM.exists? vm_name
+        vm = Fission::VM.new(vm_name)
+
+        unless vm.exists?
           Fission.ui.output_and_exit "Unable to find the VM #{vm_name} (#{Fission::VM.path(vm_name)})", 1 
         end
 
-        vm = Fission::VM.new vm_name
-
-        if vm.is_running?
+        if vm.running?
           Fission.ui.output ''
           Fission.ui.output_and_exit "VM '#{vm_name}' is already running", 0
         end
-        #TODO
-        #Fission.ui.output_and_exit "There was an error determining if the VM is already running.  The error was:\n#{response.output}", response.code
 
         Fission.ui.output "Starting '#{vm_name}'"
         start_args = {}
 
         if @options.headless
 
-          if Fission::Fusion.is_running?
+          if Fission::Fusion.running?
             Fission.ui.output 'It looks like the Fusion GUI is currently running'
             Fission.ui.output 'A VM cannot be started in headless mode when the Fusion GUI is running'
             Fission.ui.output_and_exit "Exit the Fusion GUI and try again", 1
@@ -45,7 +43,7 @@ module Fission
           end
         end
 
-        task = vm.start start_args
+        task = vm.start(start_args)
 
         if task.successful?
           Fission.ui.output "VM '#{vm_name}' started"

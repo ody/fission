@@ -14,22 +14,17 @@ module Fission
         end
 
         vm_name = @args.first
-
-
-        unless Fission::VM.exists? vm_name
-          Fission.ui.output_and_exit "Unable to find the VM #{vm_name} (#{Fission::VM.path(vm_name)})", 1 
-        end
-
         vm = Fission::VM.new vm_name
 
-        response = Fission::VM.all_running
+        unless vm.exists? 
+          Fission.ui.output_and_exit "VM #{vm_name} does not exist at (#{vm.path})", 1
+        end
 
-          unless vm.is_running?
-            Fission.ui.output ''
-            Fission.ui.output_and_exit "VM '#{vm_name}' is not running", 0
-          end
-        #TODO
-        #  Fission.ui.output_and_exit "There was an error determining if the VM is already running.  The error was:\n#{response.output}", response.code
+
+        unless vm.running?
+          Fission.ui.output ''
+          Fission.ui.output_and_exit "VM '#{vm_name}' is not running", 0
+        end
 
         Fission.ui.output "Stopping '#{vm_name}'"
         task  = vm.stop

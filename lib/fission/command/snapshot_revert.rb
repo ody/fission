@@ -14,28 +14,22 @@ module Fission
         end
 
         vm_name, snap_name = @args.take 2
-
-
-          unless Fission::VM.exists? vm_name
-            Fission.ui.output_and_exit "Unable to find the VM #{vm_name} (#{Fission::VM.path(vm_name)})", 1 
-          end
-
-
-          if Fission::Fusion.is_running?
-            Fission.ui.output 'It looks like the Fusion GUI is currently running'
-            Fission.ui.output_and_exit 'Please exit the Fusion GUI and try again', 1
-          end
-
         vm = Fission::VM.new vm_name
+
+        unless vm.exists? vm_name
+          Fission.ui.output_and_exit "Unable to find the VM #{vm_name} (#{Fission::VM.path(vm_name)})", 1 
+        end
+
+        if Fission::Fusion.running?
+          Fission.ui.output 'It looks like the Fusion GUI is currently running'
+          Fission.ui.output_and_exit 'Please exit the Fusion GUI and try again', 1
+        end
 
         snaps = vm.snapshots
 
         unless snaps.include? snap_name
           Fission.ui.output_and_exit "Unable to find the snapshot '#{snap_name}'", 1
         end
-
-        # TODO
-        #  Fission.ui.output_and_exit "There was an error getting the list of snapshots.  The error was:\n#{snapshots_task.output}", snapshots_task.code
 
         Fission.ui.output "Reverting to snapshot '#{snap_name}'"
         task = vm.revert_to_snapshot snap_name

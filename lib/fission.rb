@@ -5,6 +5,7 @@ require 'yaml'
 
 $:.unshift File.join(File.dirname(__FILE__), *%w[.. lib])
 
+require 'fission/error'
 require 'fission/cli'
 require 'fission/command'
 require 'fission/command/clone'

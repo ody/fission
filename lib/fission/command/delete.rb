@@ -16,24 +16,24 @@ module Fission
           Fission.ui.output_and_exit "Incorrect arguments for delete command", 1
         end
 
-        target_vm = @args.first
-
-        unless Fission::VM.exists? target_vm
-          Fission.ui.output_and_exit "Unable to find target vm #{target_vm} (#{Fission::VM.path(target_vm)})", 1
+        target_vm_name = @args.first
+        target_vm=Fission::VM.new(target_vm_name)
+        unless target_vm.exists?
+          Fission.ui.output_and_exit "Vm #{target_vm_name} does not exist at (#{target_vm.path})", 1
         end
 
-        if Fission::VM.all_running.include? target_vm
+        if target_vm.running?
           Fission.ui.output 'VM is currently running'
           if @options.force
             Fission.ui.output 'Going to stop it'
-            Fission::Command::Stop.new([target_vm]).execute
+            Fission::Command::Stop.new([target_vm_name]).execute
           else
             Fission.ui.output_and_exit "Either stop/suspend the VM or use '--force' and try again.", 1
           end
         end
 
 
-        if Fission::Fusion.is_running?
+        if Fission::Fusion.running?
           Fission.ui.output 'It looks like the Fusion GUI is currently running'
 
           if @options.force
@@ -44,7 +44,7 @@ module Fission
           end
         end
 
-        delete_task = Fission::VM.delete target_vm
+        delete_task = Fission::VM.delete target_vm_name
 
         if delete_task.successful?
           Fission.ui.output ''

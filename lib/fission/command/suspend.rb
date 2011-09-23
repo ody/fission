@@ -16,12 +16,12 @@ module Fission
           Fission.ui.output_and_exit "Incorrect arguments for suspend command", 1
         end
 
-        vms_to_suspend.each do |vm_name|
-          Fission.ui.output "Suspending '#{vm_name}'"
-          task = Fission::VM.new(vm_name).suspend
+        vms_to_suspend.each do |vm|
+          Fission.ui.output "Suspending '#{vm.name}'"
+          task = vm.suspend
 
           if task.successful?
-            Fission.ui.output "VM '#{vm_name}' suspended"
+            Fission.ui.output "VM '#{vm.name}' suspended"
           else
             Fission.ui.output_and_exit "There was an error suspending the VM.  The error was:\n#{task.output}", task.code
           end
@@ -33,23 +33,20 @@ module Fission
           vms=Fission::VM.all_running
         else
           vm_name = @args.first
+          vm=Fission::VM.new(vm_name)
 
-          unless Fission::VM.exists? vm_name
+          unless vm.exists?
             Fission.ui.output ''
-            Fission.ui.output_and_exit "Unable to find the VM #{vm_name} (#{Fission::VM.path(vm_name)})", 1
+            Fission.ui.output_and_exit "VM #{vm_name} does not exist (#{Fission::VM.path(vm_name)})", 1
           end
 
-
-          Fission::VM.all_running.include?(vm_name)
+          unless vm.running?
             Fission.ui.output ''
             Fission.ui.output_and_exit "VM '#{vm_name}' is not running", 1
           end
-          #TODO
-          #Fission.ui.output_and_exit "There was an error getting the list of running VMs.  The error was:\n#{response.output}", response.code
 
-          vms = [vm_name]
+          vms = [vm]
         end
-
         vms
       end
 

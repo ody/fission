@@ -38,7 +38,11 @@ module Fission
         exit(1)
       end
 
-      @cmd.execute
+      begin
+        @cmd.execute
+      rescue Error => e
+         puts "Error: #{e}"
+      end
     end
 
     def self.commands
