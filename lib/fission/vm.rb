@@ -188,6 +188,7 @@ module Fission
         # No mac address was found for this machine so we can't calculate the ip-address
         return nil
       end
+    end
 
     def suspend
       conf_file_response = conf_file
@@ -264,7 +265,8 @@ module Fission
     end
 
     def exists?
-      Fission::VM.exists?(name)
+      response=Fission::VM.exists?(name)
+      return response.data
     end
 
     def self.exists?(vm_name)
