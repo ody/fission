@@ -1,5 +1,6 @@
 require 'fission/leasesfile'
 require 'shellwords'
+require 'fission/error'
 
 module Fission
   class VM
@@ -28,7 +29,7 @@ module Fission
     # State information
     ####################################################################
     def running?
-      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+      raise Fission::Error,"VM #{@name} does not exist" unless self.exists?
 
       command = "#{vmrun_cmd} list"
       output = `#{command}`
@@ -41,12 +42,12 @@ module Fission
         end
         return vms.include?(self.vmx_path)
       else
-        raise Fission::Error("Error listing the state of vm #{@name}:\n#{output}")
+        raise Fission::Error,"Error listing the state of vm #{@name}:\n#{output}"
       end
     end
 
     def suspended?
-      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+      raise Fission::Error,"VM #{@name} does not exist" unless self.exists?
 
       suspend_filename=File.join(File.dirname(vmx_path), File.basename(vmx_path,".vmx")+".vmem")
       return File.exists?(suspend_filename)
@@ -74,7 +75,7 @@ module Fission
 
     # Returns an Array of snapshot names
     def snapshots
-      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+      raise Fission::Error,"VM #{@name} does not exist" unless self.exists?
 
       command = "#{vmrun_cmd} listSnapshots #{vmx_path.shellescape} 2>&1"
       output = `#{command}`
@@ -89,7 +90,7 @@ module Fission
     # Retrieve the first mac address for a vm
     # This will only retrieve the first auto generate mac address
     def mac_address
-      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+      raise ::Fission::Error,"VM #{@name} does not exist" unless self.exists?
 
       line=File.new(vmx_path).grep(/^ethernet0.generatedAddress =/)
       if line.nil?
@@ -103,7 +104,7 @@ module Fission
     # Retrieve the ip address for a vm.
     # This will only look for dynamically assigned ip address via vmware dhcp
     def ip_address
-      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+      raise ::Fission::Error,"VM #{@name} does not exist" unless self.exists?
 
       unless mac_address.nil?
         lease=LeasesFile.new("/var/db/vmware/vmnet-dhcpd-vmnet8.leases").find_lease_by_mac(mac_address)
@@ -155,8 +156,8 @@ module Fission
     # VM Class Actions
     #####################################################
     def self.clone(source_vm, target_vm)
-      raise Fission::Error("VM #{source_vm} does not exist") unless Fission::VM.new(source_vm).exists?
-      raise Fission::Error("VM #{target_vm} already exists") if Fission::VM.new(target_vm).exists?
+      raise Fission::Error,"VM #{source_vm} does not exist" unless Fission::VM.new(source_vm).exists?
+      raise Fission::Error,"VM #{target_vm} already exists" if Fission::VM.new(target_vm).exists?
 
       FileUtils.cp_r Fission::VM.new(source_vm).path, Fission::VM.new(target_vm).path
 
@@ -167,7 +168,7 @@ module Fission
     end
 
     def self.delete(vm_name)
-      raise Fission::Error("VM #{source_vm} does not exist") unless Fission::VM.new(vm_name).exists?
+      raise Fission::Error,"VM #{source_vm} does not exist" unless Fission::VM.new(vm_name).exists?
 
       vm=Fission::VM.new(vm_name)
       FileUtils.rm_rf vm.path
@@ -181,7 +182,7 @@ module Fission
     # VM Instance Actions
     #####################################################
     def create_snapshot(name)
-      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+      raise Fission::Error,"VM #{@name} does not exist" unless self.exists?
 
       command = "#{vmrun_cmd} snapshot #{vmx_path.shellescape} \"#{name}\" 2>&1"
       output = `#{command}`
@@ -193,8 +194,8 @@ module Fission
     end
 
     def start(args={})
-      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
-      raise Fission::Error("VM #{@name} is already started") if self.running?
+      raise Fission::Error,"VM #{@name} does not exist" unless self.exists?
+      raise Fission::Error,"VM #{@name} is already started" if self.running?
 
 
       command = "#{vmrun_cmd} start #{vmx_path.shellescape}"
@@ -214,8 +215,8 @@ module Fission
     end
 
     def stop
-      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
-      raise Fission::Error("VM #{@name} is not running") unless self.running?
+      raise Fission::Error,"VM #{@name} does not exist" unless self.exists?
+      raise Fission::Error,"VM #{@name} is not running" unless self.running?
 
       command = "#{vmrun_cmd} stop #{vmx_path.shellescape} 2>&1"
       output = `#{command}`
@@ -227,8 +228,8 @@ module Fission
     end
 
     def halt
-      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
-      raise Fission::Error("VM #{@name} is not running") unless self.running?
+      raise Fission::Error,"VM #{@name} does not exist" unless self.exists?
+      raise Fission::Error,"VM #{@name} is not running" unless self.running?
 
       command = "#{vmrun_cmd} stop #{vmx_path.shellescape} hard 2>&1"
       output = `#{command}`
@@ -240,16 +241,16 @@ module Fission
     end
 
     def resume
-      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
-      raise Fission::Error("VM #{@name} is already running") if self.running?
+      raise Fission::Error,"VM #{@name} does not exist" unless self.exists?
+      raise Fission::Error,"VM #{@name} is already running" if self.running?
       if self.suspended?
         self.start
       end
     end
 
     def suspend
-      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
-      raise Fission::Error("VM #{@name} is not running") unless self.running?
+      raise Fission::Error,"VM #{@name} does not exist" unless self.exists?
+      raise Fission::Error,"VM #{@name} is not running" unless self.running?
 
       command = "#{vmrun_cmd} suspend #{vmx_path.shellescape} hard 2>&1"
       output = `#{command}`
@@ -262,7 +263,7 @@ module Fission
     # Action to revert to a snapshot
     # Returns a response object
     def revert_to_snapshot(name)
-      raise Fission::Error("VM #{@name} does not exist") unless self.exists?
+      raise Fission::Error,"VM #{@name} does not exist" unless self.exists?
 
       command = "#{vmrun_cmd} revertToSnapshot #{vmx_path.shellescape} \"#{name}\" 2>&1"
       output = `#{command}`
