@@ -168,7 +168,7 @@ module Fission
     end
 
     def self.delete(vm_name)
-      raise Fission::Error,"VM #{source_vm} does not exist" unless Fission::VM.new(vm_name).exists?
+      raise Fission::Error,"VM #{vm_name} does not exist" unless Fission::VM.new(vm_name).exists?
 
       vm=Fission::VM.new(vm_name)
       FileUtils.rm_rf vm.path
