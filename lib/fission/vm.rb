@@ -347,9 +347,8 @@ module Fission
       # Add the correct values
       content=content+"\ntools.remindInstall = \"FALSE\"\n"
       content=content+"uuid.action = \"create\"\n"
-
       # Now rewrite the vmx file
-      File.open(new_vmx_file,'w'){ |f| f.print content}
+      File.open(new_vmx_file.path,'w'){ |f| f.print content}
 
     end
 
