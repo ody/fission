@@ -201,9 +201,9 @@ module Fission
       command = "#{vmrun_cmd} start #{vmx_path.shellescape}"
 
       if !args[:headless].blank? && args[:headless]
-        command << " nogui 2>&1"
+        command << " nogui >/dev/null 2>&1"
       else
-        command << " gui 2>&1"
+        command << " gui >/dev/null 2>&1"
       end
 
       output = `#{command}`
